@@ -21,10 +21,10 @@
     });
 
     const bounds = [[0, 0], [842, 1618]];
-    const image = L.imageOverlay('map reexport with crs.png', bounds).addTo(map);
+    const image = L.imageOverlay('map.png', bounds).addTo(map);
     map.fitBounds(bounds);
 
-    fetch('newspaces.geojson')
+    fetch('spaces.geojson')
       .then(res => res.json())
       .then(data => {
         L.geoJSON(data, {
