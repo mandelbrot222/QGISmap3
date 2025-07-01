@@ -1,0 +1,49 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Narrows Marina Map</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    body { margin: 0; }
+    #map { width: 100vw; height: 100vh; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    const map = L.map('map', {
+      crs: L.CRS.Simple,
+      minZoom: -2
+    });
+
+    const bounds = [[0, 0], [842, 1618]];
+    const image = L.imageOverlay('map reexport with crs.png', bounds).addTo(map);
+    map.fitBounds(bounds);
+
+    fetch('newspaces.geojson')
+      .then(res => res.json())
+      .then(data => {
+        L.geoJSON(data, {
+          style: {
+            color: "blue",
+            fillColor: "yellow",
+            fillOpacity: 0.4,
+            weight: 1
+          },
+          onEachFeature: function (feature, layer) {
+            let popup = "";
+            for (const key in feature.properties) {
+              popup += `<strong>$\{key\}</strong>: $\{feature.properties[key]}
+`;
+            }
+            layer.bindPopup(popup || "Unnamed Space");
+          }
+        }).addTo(map);
+      });
+  </script>
+</body>
+</html>
