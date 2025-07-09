@@ -1,6 +1,6 @@
 # QGISmap3
 
-This project displays a Leaflet map with shapes from `spaces.geojson`. The geometry is fixed and served by a small Node.js server.
+This simple Leaflet map allows dragging and scaling GeoJSON shapes. To persist your changes to `spaces.geojson`, run the included Node.js server and use the interface normally.
 
 ## Usage
 
@@ -12,4 +12,5 @@ This project displays a Leaflet map with shapes from `spaces.geojson`. The geome
    ```bash
    node server.js
    ```
-3. Open `http://localhost:3000` in your browser to view the map.
+3. Open `http://localhost:3000` in your browser.
+4. Drag shapes or adjust the scale slider and click **Save** to persist changes. The map also stores the latest state in `localStorage` for convenience.
