@@ -13,6 +13,8 @@
 </head>
 <body>
   <div id="map"></div>
+  <input id="scale-control" type="range" min="0.5" max="2" step="0.1" value="1" style="position:absolute;top:10px;left:10px;z-index:1000;">
+  <button id="save-file" style="position:absolute;top:10px;left:160px;z-index:1000;">Save</button>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
     const map = L.map('map', {
@@ -24,12 +26,40 @@
     const image = L.imageOverlay('map.png', bounds).addTo(map);
     map.fitBounds(bounds);
 
-    let shapesLayer;
+    let shapesLayer = L.featureGroup().addTo(map);
     const saved = localStorage.getItem('shapesGeoJSON');
-    const geojsonPromise = saved ? Promise.resolve(JSON.parse(saved)) : fetch('spaces.geojson').then(res => res.json());
+    const dataPromise = saved
+      ? Promise.resolve(JSON.parse(saved))
+      : Promise.all([
+          fetch('spaces.geojson').then(res => res.json()),
+          fetch('DE Dock and Signs.geojson').then(res => res.json())
+        ]).then(([spaces, dedock]) => {
+          // transform DE Dock coordinates into image space
+          const a = 0.366145008;
+          const b = -0.0850305065;
+          const c = -352800.109;
+          const d = 0.105127873;
+          const e = 2.43430903;
+          const f = -1829783.14;
 
-    geojsonPromise.then(data => {
-        shapesLayer = L.geoJSON(data, {
+          function transformCoords(coords) {
+            if (typeof coords[0] === 'number') {
+              const x = coords[0];
+              const y = coords[1];
+              return [a * x + b * y + c, d * x + e * y + f];
+            }
+            return coords.map(transformCoords);
+          }
+
+          dedock.features.forEach(feat => {
+            feat.geometry.coordinates = feat.geometry.coordinates.map(transformCoords);
+          });
+
+          return { spaces, dedock };
+        });
+
+    dataPromise.then(data => {
+        const options = {
           style: {
             color: "blue",
             fillColor: "yellow",
@@ -42,11 +72,99 @@
               popup += `<strong>${key}</strong>: ${feature.properties[key]}<br>`;
             }
             layer.bindPopup(popup || "Unnamed Space");
+            layer.on('mousedown', startDrag);
           }
-        }).addTo(map);
+        };
+
+        if (Array.isArray(data.features)) {
+          // loaded from localStorage
+          L.geoJSON(data, options).addTo(shapesLayer);
+        } else {
+          L.geoJSON(data.spaces, options).addTo(shapesLayer);
+          L.geoJSON(data.dedock, {
+            ...options,
+            style: {
+              color: 'red',
+              fillColor: 'red',
+              fillOpacity: 0.4,
+              weight: 1
+            }
+          }).addTo(shapesLayer);
+        }
       });
 
-    // Editing functionality was removed to keep the map static
+    let dragging = false;
+    let prevLatLng;
+    let currentScale = 1;
+
+    function startDrag(e) {
+      dragging = true;
+      prevLatLng = e.latlng;
+      map.dragging.disable();
+      map.on('mousemove', onDrag);
+      map.on('mouseup', endDrag);
+    }
+
+    function onDrag(e) {
+      if (!dragging) return;
+      const latDiff = e.latlng.lat - prevLatLng.lat;
+      const lngDiff = e.latlng.lng - prevLatLng.lng;
+      shapesLayer.eachLayer(layer => {
+        layer.setLatLngs(shiftLatLngs(layer.getLatLngs(), latDiff, lngDiff));
+      });
+      prevLatLng = e.latlng;
+    }
+
+    function endDrag() {
+      dragging = false;
+      map.dragging.enable();
+      map.off('mousemove', onDrag);
+      map.off('mouseup', endDrag);
+      saveShapes();
+    }
+
+    function shiftLatLngs(latlngs, latDiff, lngDiff) {
+      if (Array.isArray(latlngs[0])) {
+        return latlngs.map(ll => shiftLatLngs(ll, latDiff, lngDiff));
+      }
+      return latlngs.map(ll => L.latLng(ll.lat + latDiff, ll.lng + lngDiff));
+    }
+
+    function scaleLatLngs(latlngs, factor, origin) {
+      if (Array.isArray(latlngs[0])) {
+        return latlngs.map(ll => scaleLatLngs(ll, factor, origin));
+      }
+      return latlngs.map(ll => {
+        const lat = origin.lat + (ll.lat - origin.lat) * factor;
+        const lng = origin.lng + (ll.lng - origin.lng) * factor;
+        return L.latLng(lat, lng);
+      });
+    }
+
+    document.getElementById('scale-control').addEventListener('input', e => {
+      if (!shapesLayer) return;
+      const newScale = parseFloat(e.target.value);
+      const factor = newScale / currentScale;
+      const origin = shapesLayer.getBounds().getCenter();
+      shapesLayer.eachLayer(layer => {
+        layer.setLatLngs(scaleLatLngs(layer.getLatLngs(), factor, origin));
+      });
+      currentScale = newScale;
+      saveShapes();
+    });
+
+    document.getElementById('save-file').addEventListener('click', saveShapes);
+
+    function saveShapes() {
+      if (!shapesLayer) return;
+      const geojson = shapesLayer.toGeoJSON();
+      localStorage.setItem('shapesGeoJSON', JSON.stringify(geojson));
+      fetch('/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(geojson)
+      }).catch(err => console.error('Error saving file', err));
+    }
   </script>
 </body>
 </html>
