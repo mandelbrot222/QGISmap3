@@ -37,8 +37,7 @@
           onEachFeature: function (feature, layer) {
             let popup = "";
             for (const key in feature.properties) {
-              popup += `<strong>$\{key\}</strong>: $\{feature.properties[key]}
-`;
+              popup += `<strong>${key}</strong>: ${feature.properties[key]}<br>`;
             }
             layer.bindPopup(popup || "Unnamed Space");
           }
