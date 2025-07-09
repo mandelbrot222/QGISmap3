@@ -24,10 +24,11 @@
     const image = L.imageOverlay('map.png', bounds).addTo(map);
     map.fitBounds(bounds);
 
+    let shapesLayer;
     fetch('spaces.geojson')
       .then(res => res.json())
       .then(data => {
-        L.geoJSON(data, {
+        shapesLayer = L.geoJSON(data, {
           style: {
             color: "blue",
             fillColor: "yellow",
@@ -40,9 +41,45 @@
               popup += `<strong>${key}</strong>: ${feature.properties[key]}<br>`;
             }
             layer.bindPopup(popup || "Unnamed Space");
+            layer.on('mousedown', startDrag);
           }
         }).addTo(map);
       });
+
+    let dragging = false;
+    let prevLatLng;
+
+    function startDrag(e) {
+      dragging = true;
+      prevLatLng = e.latlng;
+      map.dragging.disable();
+      map.on('mousemove', onDrag);
+      map.on('mouseup', endDrag);
+    }
+
+    function onDrag(e) {
+      if (!dragging) return;
+      const latDiff = e.latlng.lat - prevLatLng.lat;
+      const lngDiff = e.latlng.lng - prevLatLng.lng;
+      shapesLayer.eachLayer(layer => {
+        layer.setLatLngs(shiftLatLngs(layer.getLatLngs(), latDiff, lngDiff));
+      });
+      prevLatLng = e.latlng;
+    }
+
+    function endDrag() {
+      dragging = false;
+      map.dragging.enable();
+      map.off('mousemove', onDrag);
+      map.off('mouseup', endDrag);
+    }
+
+    function shiftLatLngs(latlngs, latDiff, lngDiff) {
+      if (Array.isArray(latlngs[0])) {
+        return latlngs.map(ll => shiftLatLngs(ll, latDiff, lngDiff));
+      }
+      return latlngs.map(ll => L.latLng(ll.lat + latDiff, ll.lng + lngDiff));
+    }
   </script>
 </body>
 </html>
