@@ -13,6 +13,8 @@
 </head>
 <body>
   <div id="map"></div>
+  <input id="scale-control" type="range" min="0.5" max="2" step="0.1" value="1" style="position:absolute;top:10px;left:10px;z-index:1000;">
+  <button id="save-file" style="position:absolute;top:10px;left:160px;z-index:1000;">Save</button>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
     const map = L.map('map', {
@@ -25,9 +27,10 @@
     map.fitBounds(bounds);
 
     let shapesLayer;
-    fetch('spaces.geojson')
-      .then(res => res.json())
-      .then(data => {
+    const saved = localStorage.getItem('shapesGeoJSON');
+    const geojsonPromise = saved ? Promise.resolve(JSON.parse(saved)) : fetch('spaces.geojson').then(res => res.json());
+
+    geojsonPromise.then(data => {
         shapesLayer = L.geoJSON(data, {
           style: {
             color: "blue",
@@ -48,6 +51,7 @@
 
     let dragging = false;
     let prevLatLng;
+    let currentScale = 1;
 
     function startDrag(e) {
       dragging = true;
@@ -72,6 +76,7 @@
       map.dragging.enable();
       map.off('mousemove', onDrag);
       map.off('mouseup', endDrag);
+      saveShapes();
     }
 
     function shiftLatLngs(latlngs, latDiff, lngDiff) {
@@ -79,6 +84,42 @@
         return latlngs.map(ll => shiftLatLngs(ll, latDiff, lngDiff));
       }
       return latlngs.map(ll => L.latLng(ll.lat + latDiff, ll.lng + lngDiff));
+    }
+
+    function scaleLatLngs(latlngs, factor, origin) {
+      if (Array.isArray(latlngs[0])) {
+        return latlngs.map(ll => scaleLatLngs(ll, factor, origin));
+      }
+      return latlngs.map(ll => {
+        const lat = origin.lat + (ll.lat - origin.lat) * factor;
+        const lng = origin.lng + (ll.lng - origin.lng) * factor;
+        return L.latLng(lat, lng);
+      });
+    }
+
+    document.getElementById('scale-control').addEventListener('input', e => {
+      if (!shapesLayer) return;
+      const newScale = parseFloat(e.target.value);
+      const factor = newScale / currentScale;
+      const origin = shapesLayer.getBounds().getCenter();
+      shapesLayer.eachLayer(layer => {
+        layer.setLatLngs(scaleLatLngs(layer.getLatLngs(), factor, origin));
+      });
+      currentScale = newScale;
+      saveShapes();
+    });
+
+    document.getElementById('save-file').addEventListener('click', saveShapes);
+
+    function saveShapes() {
+      if (!shapesLayer) return;
+      const geojson = shapesLayer.toGeoJSON();
+      localStorage.setItem('shapesGeoJSON', JSON.stringify(geojson));
+      fetch('/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(geojson)
+      }).catch(err => console.error('Error saving file', err));
     }
   </script>
 </body>
