@@ -22,7 +22,7 @@
       minZoom: -2
     });
 
-    const bounds = [[0, 0], [842, 1618]];
+    const bounds = L.latLngBounds([[0, 0], [842, 1618]]);
     const image = L.imageOverlay('map.png', bounds).addTo(map);
     map.fitBounds(bounds);
 
@@ -91,6 +91,9 @@
             }
           }).addTo(shapesLayer);
         }
+        const combined = L.latLngBounds(bounds);
+        combined.extend(shapesLayer.getBounds());
+        map.fitBounds(combined);
       });
 
     let dragging = false;
